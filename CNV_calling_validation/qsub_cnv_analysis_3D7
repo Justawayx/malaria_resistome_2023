@@ -1,0 +1,53 @@
+#!/bin/sh
+#PBS -A winzeler-group
+#PBS -N Resistome_cnv_analysis_3D7
+#PBS -l nodes=1:ppn=8,walltime=08:00:00
+#PBS -o /home/dwc001/scratch/logs
+#PBS -e /home/dwc001/scratch/logs
+#PBS -M dwc001@ucsd.edu
+#PBS -m a
+#PBS -t 301-674
+
+bamnames_file=/projects/winzeler/ANALYSIS/DNAseq/test/bamnames_3D7.txt
+bam_dir=/projects/winzeler/ANALYSIS/DNAseq/Madeline/BAMS/3D7/analyzed
+main_dir=/projects/winzeler/ANALYSIS/DNAseq/test/gatk_cnv_3D7
+
+readarray bamnames < $bamnames_file
+bamnames=(null ${bamnames[@]}) # zero to one start index
+bamname=${bamnames[$PBS_ARRAYID]}
+echo $bamname
+
+x=${bamname%.ready.bam}
+y=${x##*/}
+z=${y%.bam}
+sample=${z##*/}
+echo $sample
+
+gatk_path=/opt/biotools/GenomeAnalysisTK/4.0.11.0/gatk-package-4.0.11.0-local.jar
+pon_path=/projects/winzeler/ANALYSIS/DNAseq/Madeline/GATK_CNV/PON/3D7cnv.pon.hdf5
+interval_list_path=/projects/winzeler/ANALYSIS/DNAseq/Madeline/GATK_CNV/references/p_fal.preprocessed.interval_list
+
+echo "Working on sample $sample"
+
+bam_path=$bam_dir/$bamname
+
+echo "Collecting read counts..."
+java -jar $gatk_path CollectReadCounts \
+	-I $bam_path \
+	-L $interval_list_path \
+	--interval-merging-rule OVERLAPPING_ONLY \
+	-O $main_dir/${sample}.counts.hdf5
+
+echo "Denoising read counts..."
+java -jar $gatk_path DenoiseReadCounts \
+	-I $main_dir/${sample}.counts.hdf5 \
+	--count-panel-of-normals $pon_path \
+	--standardized-copy-ratios $main_dir/${sample}.standardizedCR.tsv \
+	--denoised-copy-ratios $main_dir/${sample}.denoisedCR.tsv
+
+# echo "Collecting allelic counts..."
+# java -jar $gatk_path CollectAllelicCounts \
+# 				-L $interval_list_path \
+# 				-I $bam_path \
+# 				-R $ref_fasta \
+# 				-O $main_dir/${sample}.allelicCounts.tsv
